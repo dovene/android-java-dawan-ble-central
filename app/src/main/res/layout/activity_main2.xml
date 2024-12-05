@@ -16,13 +16,20 @@
         android:id="@+id/batteryText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Battery: N/A"
+        android:text="Batterie: N/A"
         android:textSize="16sp"/>
 
     <TextView
-        android:id="@+id/signalText"
+        android:id="@+id/temperatureText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Signal Strength: N/A"
+        android:text="Temperature: N/A"
+        android:textSize="16sp"/>
+
+    <TextView
+        android:id="@+id/humidityText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Humidité: N/A"
         android:textSize="16sp"/>
 </LinearLayout>
