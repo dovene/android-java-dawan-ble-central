@@ -27,8 +27,6 @@ import android.os.ParcelUuid;
 import android.util.Log;
 import android.widget.TextView;
 
-import androidx.core.app.ActivityCompat;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -46,23 +44,28 @@ public class CentralActivity extends AppCompatActivity {
             Manifest.permission.BLUETOOTH_SCAN
     };
 
-    private static final UUID BATTERY_CHARACTERISTIC = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb"); private static final UUID SIGNAL_CHARACTERISTIC = UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb");
+    private static final UUID BATTERY_CHARACTERISTIC = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
+    private static final UUID TEMPERATURE_CHARACTERISTIC_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fc");
+    private static final UUID HUMIDITY_CHARACTERISTIC_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fd");
     private static final UUID TARGET_SERVICE_UUID = UUID.fromString("00000000-1111-2222-3333-444444444444");
+
     private final Set<String> connectedDevices = new HashSet<>();
 
 
     private BluetoothLeScanner scanner;
     private BluetoothGatt bluetoothGatt;
-    private TextView statusText, batteryText, signalText;
+    private TextView statusText, batteryText, temperatureText, humidityText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main2);
+        setContentView(R.layout.activity_central);
 
         statusText = findViewById(R.id.statusText);
         batteryText = findViewById(R.id.batteryText);
-        signalText = findViewById(R.id.signalText);
+        temperatureText = findViewById(R.id.temperatureText);
+        humidityText = findViewById(R.id.humidityText);
+
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(PERMISSIONS, REQUEST_PERMISSIONS);
@@ -72,6 +75,7 @@ public class CentralActivity extends AppCompatActivity {
 
     }
 
+    @SuppressLint("MissingPermission")
     private void setupBluetoothScanning() {
         BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
@@ -80,15 +84,7 @@ public class CentralActivity extends AppCompatActivity {
             statusText.setText("Bluetooth is not available");
             return;
         }
-
         scanner = bluetoothAdapter.getBluetoothLeScanner();
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.BLUETOOTH_SCAN}, 1);
-            return;
-        }
-
         scanner.startScan(scanCallback);
     }
 
@@ -100,15 +96,11 @@ public class CentralActivity extends AppCompatActivity {
             if (device == null || connectedDevices.contains(device.getAddress())) {
                 return; // Skip already connected devices
             }
-
             List<ParcelUuid> serviceUuids = result.getScanRecord().getServiceUuids();
             if (serviceUuids != null && serviceUuids.contains(ParcelUuid.fromString(TARGET_SERVICE_UUID.toString()))) {
                 connectedDevices.add(device.getAddress());
                 device.connectGatt(CentralActivity.this, false, gattCallback);
-
             }
-
-
         }
     };
 
@@ -130,56 +122,84 @@ public class CentralActivity extends AppCompatActivity {
                 gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
 
                 runOnUiThread(() -> {
-                    statusText.setText("Connected to Device");
-                    batteryText.setText("Battery: N/A");
-                    signalText.setText("Signal Strength: N/A");
-                    //Toast.makeText(MainActivity2.this, "Connected to Device", Toast.LENGTH_SHORT).show();
+                    statusText.setText("Connected to Device "+ gatt.getDevice().getAddress());
                 } );
                 new Handler(Looper.getMainLooper()).postDelayed(() -> gatt.discoverServices(), 500);
 
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 runOnUiThread(() -> {
                     statusText.setText("Disconnected from Device");
-                    batteryText.setText("Battery: N/A");
-                    signalText.setText("Signal Strength: N/A");
                 });
                 new Handler(Looper.getMainLooper()).postDelayed(() -> gatt.connect(), 2000);
-
             }
         }
 
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                List<BluetoothGattService> services = gatt.getServices();
-                for (BluetoothGattService service : services) {
-                    if (service.getUuid().equals(TARGET_SERVICE_UUID)) {
-                        List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
-                        for (BluetoothGattCharacteristic characteristic : characteristics) {
-                            readCharacteristic(gatt, characteristic);
-                        }
-                    }
+                BluetoothGattService service = gatt.getService(TARGET_SERVICE_UUID);
+                if (service != null) {
+                    // Read all characteristics sequentially
+                    readCharacteristics(gatt, service);
                 }
+            } else {
+                Log.e("BLE", "Services discovery failed, status: " + status);
             }
         }
 
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
+                // Use byte array to handle potential multi-byte values
+                byte[] value = characteristic.getValue();
+
                 if (characteristic.getUuid().equals(BATTERY_CHARACTERISTIC)) {
                     int batteryLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
+                   // int batteryLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
                     runOnUiThread(() -> batteryText.setText("Battery: " + batteryLevel + "%"));
+
+                    // Read next characteristic
+                    readNextCharacteristic(gatt, TEMPERATURE_CHARACTERISTIC_UUID);
+                } else if (characteristic.getUuid().equals(TEMPERATURE_CHARACTERISTIC_UUID)) {
+                    int temperatureLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
+
+                   // int temperatureLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
+                    runOnUiThread(() -> temperatureText.setText("Temperature: " + temperatureLevel + "°C"));
+
+                    // Read next characteristic
+                    readNextCharacteristic(gatt, HUMIDITY_CHARACTERISTIC_UUID);
+                } else if (characteristic.getUuid().equals(HUMIDITY_CHARACTERISTIC_UUID)) {
+                    int humidityLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
+
+                    // int humidityLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
+                    runOnUiThread(() -> humidityText.setText("Humidity: " + humidityLevel + "%"));
                 }
-                // Similar handling for signal strength
+            } else {
+                Log.e("BLE", "Characteristic read failed: " + status);
             }
         }
     };
 
-    private void readCharacteristic(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            return;
+
+
+    @SuppressLint("MissingPermission")
+    private void readCharacteristics(BluetoothGatt gatt, BluetoothGattService service) {
+        // Start with battery characteristic
+        BluetoothGattCharacteristic batteryChar = service.getCharacteristic(BATTERY_CHARACTERISTIC);
+        if (batteryChar != null) {
+            gatt.readCharacteristic(batteryChar);
         }
-        gatt.readCharacteristic(characteristic);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void readNextCharacteristic(BluetoothGatt gatt, UUID characteristicUUID) {
+        BluetoothGattService service = gatt.getService(TARGET_SERVICE_UUID);
+        if (service != null) {
+            BluetoothGattCharacteristic characteristic = service.getCharacteristic(characteristicUUID);
+            if (characteristic != null) {
+                gatt.readCharacteristic(characteristic);
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
