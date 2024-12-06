@@ -139,38 +139,69 @@ public class CentralActivity extends AppCompatActivity {
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                List<BluetoothGattService> services = gatt.getServices();
-                for (BluetoothGattService service : services) {
-                    if (service.getUuid().equals(TARGET_SERVICE_UUID)) {
-                        List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
-                        for (BluetoothGattCharacteristic characteristic : characteristics) {
-                            readCharacteristic(gatt, characteristic);
-                        }
-                    }
+                BluetoothGattService service = gatt.getService(TARGET_SERVICE_UUID);
+                if (service != null) {
+                    // Read all characteristics sequentially
+                    readCharacteristics(gatt, service);
                 }
+            } else {
+                Log.e("BLE", "Services discovery failed, status: " + status);
             }
         }
 
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
+                // Use byte array to handle potential multi-byte values
+                byte[] value = characteristic.getValue();
+
                 if (characteristic.getUuid().equals(BATTERY_CHARACTERISTIC)) {
                     int batteryLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
+                   // int batteryLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
                     runOnUiThread(() -> batteryText.setText("Battery: " + batteryLevel + "%"));
+
+                    // Read next characteristic
+                    readNextCharacteristic(gatt, TEMPERATURE_CHARACTERISTIC_UUID);
                 } else if (characteristic.getUuid().equals(TEMPERATURE_CHARACTERISTIC_UUID)) {
                     int temperatureLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
-                    runOnUiThread(() -> temperatureText.setText("Temperature: " + temperatureLevel + "%"));
+
+                   // int temperatureLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
+                    runOnUiThread(() -> temperatureText.setText("Temperature: " + temperatureLevel + "°C"));
+
+                    // Read next characteristic
+                    readNextCharacteristic(gatt, HUMIDITY_CHARACTERISTIC_UUID);
                 } else if (characteristic.getUuid().equals(HUMIDITY_CHARACTERISTIC_UUID)) {
                     int humidityLevel = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0);
-                    runOnUiThread(() -> humidityText.setText("Humidité: " + humidityLevel + "%"));
+
+                    // int humidityLevel = value != null && value.length > 0 ? (value[0] & 0xFF) : 0;
+                    runOnUiThread(() -> humidityText.setText("Humidity: " + humidityLevel + "%"));
                 }
+            } else {
+                Log.e("BLE", "Characteristic read failed: " + status);
             }
         }
     };
 
+
+
     @SuppressLint("MissingPermission")
-    private void readCharacteristic(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-        gatt.readCharacteristic(characteristic);
+    private void readCharacteristics(BluetoothGatt gatt, BluetoothGattService service) {
+        // Start with battery characteristic
+        BluetoothGattCharacteristic batteryChar = service.getCharacteristic(BATTERY_CHARACTERISTIC);
+        if (batteryChar != null) {
+            gatt.readCharacteristic(batteryChar);
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void readNextCharacteristic(BluetoothGatt gatt, UUID characteristicUUID) {
+        BluetoothGattService service = gatt.getService(TARGET_SERVICE_UUID);
+        if (service != null) {
+            BluetoothGattCharacteristic characteristic = service.getCharacteristic(characteristicUUID);
+            if (characteristic != null) {
+                gatt.readCharacteristic(characteristic);
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")

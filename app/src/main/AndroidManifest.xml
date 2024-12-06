@@ -21,9 +21,6 @@
         android:theme="@style/Theme.BLECentral"
         tools:targetApi="31">
         <activity
-            android:name=".MainActivity"
-            android:exported="false" />
-        <activity
             android:name=".CentralActivity"
             android:exported="true">
             <intent-filter>
