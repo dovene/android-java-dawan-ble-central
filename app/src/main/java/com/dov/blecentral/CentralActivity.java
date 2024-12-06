@@ -27,8 +27,6 @@ import android.os.ParcelUuid;
 import android.util.Log;
 import android.widget.TextView;
 
-import androidx.core.app.ActivityCompat;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -61,7 +59,7 @@ public class CentralActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main2);
+        setContentView(R.layout.activity_central);
 
         statusText = findViewById(R.id.statusText);
         batteryText = findViewById(R.id.batteryText);
@@ -124,7 +122,7 @@ public class CentralActivity extends AppCompatActivity {
                 gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
 
                 runOnUiThread(() -> {
-                    statusText.setText("Connected to Device");
+                    statusText.setText("Connected to Device "+ gatt.getDevice().getAddress());
                 } );
                 new Handler(Looper.getMainLooper()).postDelayed(() -> gatt.discoverServices(), 500);
 
